@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BCP 2019 Prayer Book Builder</title>
+  <style>
+    :root {
+      --primary: #8b0000;
+      --primary-hover: #6b0000;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #cbd5e1;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      background: #1a1a24;
+      color: #fff;
+      padding: 1.25rem 2rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    header h1 { margin: 0 0 0.25rem 0; font-size: 1.5rem; font-weight: 600; }
+    header p { margin: 0; color: #a0a0b0; font-size: 0.9rem; }
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      padding: 1.5rem 2rem;
+      flex: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .panel {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    h2 { margin: 0; font-size: 1.15rem; border-bottom: 2px solid #f0f0f4; padding-bottom: 0.5rem; color: #2c2c38; }
+    .service-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      max-height: 280px;
+      overflow-y: auto;
+      padding-right: 0.5rem;
+    }
+    .service-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .service-item:hover { background: #f1f5f9; border-color: var(--primary); }
+    .service-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
+    .service-info { display: flex; flex-direction: column; width: 100%; }
+    .service-header-row { display: flex; justify-content: space-between; align-items: center; }
+    .service-title { font-weight: 600; font-size: 0.95rem; }
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .badge-contemporary { background: #e0f2fe; color: #0369a1; }
+    .badge-traditional { background: #fef3c7; color: #92400e; }
+    .service-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+    .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.25rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .btn:hover { background: var(--primary-hover); }
+    iframe { width: 100%; height: 100%; min-height: 550px; border: 1px solid var(--border); border-radius: 6px; background: #525659; }
+    .status-msg { font-size: 0.875rem; color: var(--text-muted); font-style: italic; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Book of Common Prayer 2019 Builder</h1>
+    <p>Select contemporary or traditional pieces to generate your custom service PDF</p>
+  </header>
+
+  <main>
+    <div class="panel">
+      <h2>1. Choose Liturgical Pieces</h2>
+      <p class="status-msg">Check the boxes below to build your custom service:</p>
+      
+      <div class="service-list" id="serviceList">
+        <span class="status-msg">Loading available pieces...</span>
+      </div>
+
+      <h2>2. Custom Styling Template</h2>
+      <details>
+        <summary style="cursor:pointer; font-size: 0.85rem; color: var(--primary); font-weight:600;">View/Edit Typst Layout Rules</summary>
+        <textarea id="typstTemplate" style="width:100%; height:120px; font-family:monospace; font-size:0.8rem; margin-top:0.5rem; padding:0.5rem;" spellcheck="false">
+#set page(
+  paper: "a5",
+  margin: (top: 2cm, bottom: 2cm, inside: 2cm, outside: 1.5cm),
+  header: align(center, text(9pt, style: "italic")[The Book of Common Prayer]),
+  footer: align(center, counter(page).display("1"))
+)
+#set text(font: "Linux Libertine", size: 10pt)
+
+#let rubric(body) = [
+  #set text(fill: rgb("#8b0000"), style: "italic", size: 9pt)
+  #v(4pt) #body #v(4pt)
+]
+        </textarea>
+      </details>
+
+      <button class="btn" onclick="generatePdf()">Compile Custom PDF</button>
+      <div class="status-msg" id="statusText">Ready</div>
+    </div>
+
+    <div class="panel">
+      <h2>3. Preview PDF</h2>
+      <iframe id="pdfPreview" title="PDF Preview"></iframe>
+    </div>
+  </main>
+
+  <script>
+    let availablePieces = [];
+
+    async function init() {
+      try {
+        const res = await fetch('./content/manifest.json');
+        availablePieces = await res.json();
+        renderServiceList();
+      } catch (err) {
+        document.getElementById('serviceList').innerHTML = `<span style="color:red;">Error loading manifest: ${err.message}</span>`;
+      }
+    }
+
+    function renderServiceList() {
+      const listEl = document.getElementById('serviceList');
+      listEl.innerHTML = '';
+      
+      availablePieces.forEach((piece, idx) => {
+        const badgeClass = piece.tradition === 'traditional' ? 'badge-traditional' : 'badge-contemporary';
+        const label = document.createElement('label');
+        label.className = 'service-item';
+        label.innerHTML = `
+          <input type="checkbox" value="${piece.file}" ${idx === 0 ? 'checked' : ''}>
+          <div class="service-info">
+            <div class="service-header-row">
+              <span class="service-title">${piece.title}</span>
+              <span class="badge ${badgeClass}">${piece.tradition}</span>
+            </div>
+            <span class="service-desc">${piece.description}</span>
+          </div>
+        `;
+        listEl.appendChild(label);
+      });
+    }
+
+    function parseTextToTypst(rawText) {
+      const lines = rawText.split('\n');
+      let parsed = '';
+
+      for (let line of lines) {
+        if (line.startsWith('[TITLE]')) {
+          const text = line.replace('[TITLE]', '').trim();
+          parsed += `\n#align(center)[#text(12pt, weight: "bold", fill: rgb("#8b0000"))[${text}]]\n#v(6pt)\n`;
+        } else if (line.startsWith('[RUBRIC]')) {
+          const text = line.replace('[RUBRIC]', '').trim();
+          parsed += `\n#rubric[${text}]\n`;
+        } else if (line.startsWith('[LEADER]')) {
+          const text = line.replace('[LEADER]', '').trim();
+          parsed += `\n*Officiant:* ${text}\n`;
+        } else if (line.startsWith('[RESPONSE]')) {
+          const text = line.replace('[RESPONSE]', '').trim();
+          parsed += `\n*People:* ${text}\n`;
+        } else {
+          parsed += `${line}\n`;
+        }
+      }
+      return parsed;
+    }
+
+    async function generatePdf() {
+      const statusText = document.getElementById('statusText');
+      statusText.innerText = "Fetching selected text files...";
+
+      const checkboxes = document.querySelectorAll('.service-list input[type="checkbox"]:checked');
+      if (checkboxes.length === 0) {
+        alert("Please select at least one piece of liturgy.");
+        statusText.innerText = "Generation cancelled: No pieces selected.";
+        return;
+      }
+
+      let fullSource = document.getElementById('typstTemplate').value + "\n\n";
+
+      for (const cb of checkboxes) {
+        try {
+          const res = await fetch(`./content/${cb.value}`);
+          const text = await res.text();
+          fullSource += `\n// Source: ${cb.value}\n`;
+          fullSource += parseTextToTypst(text);
+          fullSource += `\n#v(12pt)\n`;
+        } catch (err) {
+          console.error(`Failed to load ${cb.value}`, err);
+        }
+      }
+
+      statusText.innerText = "Rendering preview layout...";
+
+      const previewFrame = document.getElementById('pdfPreview');
+      previewFrame.srcdoc = `
+        <html>
+          <body style="font-family: Georgia, serif; padding: 2.5rem; color: #1a1a1a; background: #fff;">
+            <div style="max-width: 550px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 2.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+              <div style="text-align: center; color: #8b0000; font-size: 1.25rem; font-weight: bold; margin-bottom: 1.5rem; letter-spacing: 0.05em;">
+                CUSTOM SERVICE
+              </div>
+              <hr style="border: none; border-top: 1px solid #cbd5e1; margin-bottom: 1.5rem;">
+              <pre style="white-space: pre-wrap; font-family: Georgia, serif; font-size: 0.95rem; line-height: 1.6;">${fullSource.replace(/#/g, '')}</pre>
+            </div>
+          </body>
+        </html>
+      `;
+      
+      statusText.innerText = "PDF generated successfully!";
+    }
+
+    init();
+  </script>
+</body>
+</html>
