@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BCP 2019 Prayer Book Builder</title>
+  
+  <!-- Import Map to resolve bare module specifiers for Typst WASM -->
+  <script type="importmap">
+    {
+      "imports": {
+        "@myriaddreamin/typst.ts/contrib/snippet": "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/contrib/snippet.mjs",
+        "@myriaddreamin/typst.ts": "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/index.mjs"
+      }
+    }
+  </script>
+
   <style>
     :root {
       --primary: #8b0000;
@@ -131,151 +142,4 @@
         <textarea id="typstTemplate" style="width:100%; height:120px; font-family:monospace; font-size:0.8rem; margin-top:0.5rem; padding:0.5rem;" spellcheck="false">
 #set page(
   paper: "a5",
-  margin: (top: 2cm, bottom: 2cm, inside: 2cm, outside: 1.5cm),
-  header: align(center, text(9pt, style: "italic")[The Book of Common Prayer]),
-  footer: align(center, counter(page).display("1"))
-)
-#set text(font: "Liberation Serif", size: 10pt)
-
-#let rubric(body) = [
-  #set text(fill: rgb("#8b0000"), style: "italic", size: 9pt)
-  #v(4pt) #body #v(4pt)
-]
-        </textarea>
-      </details>
-
-      <button class="btn" id="compileBtn" onclick="generatePdf()">Compile Custom PDF</button>
-      <div class="status-msg" id="statusText">Loading Typst Engine...</div>
-    </div>
-
-    <div class="panel">
-      <h2>3. Preview PDF</h2>
-      <iframe id="pdfPreview" title="PDF Preview"></iframe>
-    </div>
-  </main>
-
-  <!-- Load Typst WASM Web Library -->
-  <script type="module">
-    import { $typst } from "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts/dist/esm/contrib/snippet.mjs";
-
-    let availablePieces = [];
-    let isCompilerReady = false;
-
-    async function init() {
-      const statusText = document.getElementById('statusText');
-      try {
-        // Load Manifest
-        const res = await fetch('./content/manifest.json');
-        availablePieces = await res.json();
-        renderServiceList();
-
-        // Initialize Typst WASM Compiler
-        statusText.innerText = "Initializing Typst WASM compiler...";
-        $typst.setCompilerInitOptions({
-          getModule: () => "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst-ts-web-compiler/pkg/typst_ts_web_compiler_bg.wasm"
-        });
-        await $typst.pdf(); // Pre-warm WASM binary
-        isCompilerReady = true;
-        statusText.innerText = "Ready to compile!";
-      } catch (err) {
-        console.error("Initialization error:", err);
-        statusText.innerText = "Ready (Using fallback compilation mode)";
-      }
-    }
-
-    function renderServiceList() {
-      const listEl = document.getElementById('serviceList');
-      listEl.innerHTML = '';
-      
-      availablePieces.forEach((piece, idx) => {
-        const badgeClass = piece.tradition === 'traditional' ? 'badge-traditional' : 'badge-contemporary';
-        const label = document.createElement('label');
-        label.className = 'service-item';
-        label.innerHTML = `
-          <input type="checkbox" value="${piece.file}" ${idx === 0 ? 'checked' : ''}>
-          <div class="service-info">
-            <div class="service-header-row">
-              <span class="service-title">${piece.title}</span>
-              <span class="badge ${badgeClass}">${piece.tradition}</span>
-            </div>
-            <span class="service-desc">${piece.description}</span>
-          </div>
-        `;
-        listEl.appendChild(label);
-      });
-    }
-
-    function parseTextToTypst(rawText) {
-      const lines = rawText.split('\n');
-      let parsed = '';
-
-      for (let line of lines) {
-        if (line.startsWith('[TITLE]')) {
-          const text = line.replace('[TITLE]', '').trim();
-          parsed += `\n#align(center)[#text(12pt, weight: "bold", fill: rgb("#8b0000"))[${text}]]\n#v(6pt)\n`;
-        } else if (line.startsWith('[RUBRIC]')) {
-          const text = line.replace('[RUBRIC]', '').trim();
-          parsed += `\n#rubric[${text}]\n`;
-        } else if (line.startsWith('[LEADER]')) {
-          const text = line.replace('[LEADER]', '').trim();
-          parsed += `\n*Officiant:* ${text}\n`;
-        } else if (line.startsWith('[RESPONSE]')) {
-          const text = line.replace('[RESPONSE]', '').trim();
-          parsed += `\n*People:* ${text}\n`;
-        } else {
-          parsed += `${line}\n`;
-        }
-      }
-      return parsed;
-    }
-
-    window.generatePdf = async function() {
-      const statusText = document.getElementById('statusText');
-      const compileBtn = document.getElementById('compileBtn');
-      statusText.innerText = "Fetching selected text files...";
-      compileBtn.disabled = true;
-
-      const checkboxes = document.querySelectorAll('.service-list input[type="checkbox"]:checked');
-      if (checkboxes.length === 0) {
-        alert("Please select at least one piece of liturgy.");
-        statusText.innerText = "Generation cancelled: No pieces selected.";
-        compileBtn.disabled = false;
-        return;
-      }
-
-      let fullSource = document.getElementById('typstTemplate').value + "\n\n";
-
-      for (const cb of checkboxes) {
-        try {
-          const res = await fetch(`./content/${cb.value}`);
-          const text = await res.text();
-          fullSource += `\n// Source: ${cb.value}\n`;
-          fullSource += parseTextToTypst(text);
-          fullSource += `\n#v(12pt)\n`;
-        } catch (err) {
-          console.error(`Failed to load ${cb.value}`, err);
-        }
-      }
-
-      statusText.innerText = "Compiling PDF via Typst WASM...";
-
-      try {
-        // Perform real Typst WASM compilation to PDF Array Buffer
-        const pdfBytes = await $typst.pdf({ mainContent: fullSource });
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-        const pdfUrl = URL.createObjectURL(blob);
-        
-        document.getElementById('pdfPreview').src = pdfUrl;
-        statusText.innerText = "PDF compiled successfully!";
-      } catch (err) {
-        console.error("Typst compilation error:", err);
-        statusText.innerText = "Compilation error: " + err.message;
-      } finally {
-        compileBtn.disabled = false;
-      }
-    };
-
-    init();
-  </script>
-</body>
-</html>
+  margin
