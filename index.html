@@ -103,6 +103,7 @@
       gap: 0.5rem;
     }
     .btn:hover { background: var(--primary-hover); }
+    .btn:disabled { background: #94a3b8; cursor: not-allowed; }
     iframe { width: 100%; height: 100%; min-height: 550px; border: 1px solid var(--border); border-radius: 6px; background: #525659; }
     .status-msg { font-size: 0.875rem; color: var(--text-muted); font-style: italic; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
@@ -134,7 +135,7 @@
   header: align(center, text(9pt, style: "italic")[The Book of Common Prayer]),
   footer: align(center, counter(page).display("1"))
 )
-#set text(font: "Linux Libertine", size: 10pt)
+#set text(font: "Liberation Serif", size: 10pt)
 
 #let rubric(body) = [
   #set text(fill: rgb("#8b0000"), style: "italic", size: 9pt)
@@ -143,8 +144,8 @@
         </textarea>
       </details>
 
-      <button class="btn" onclick="generatePdf()">Compile Custom PDF</button>
-      <div class="status-msg" id="statusText">Ready</div>
+      <button class="btn" id="compileBtn" onclick="generatePdf()">Compile Custom PDF</button>
+      <div class="status-msg" id="statusText">Loading Typst Engine...</div>
     </div>
 
     <div class="panel">
@@ -153,16 +154,32 @@
     </div>
   </main>
 
-  <script>
+  <!-- Load Typst WASM Web Library -->
+  <script type="module">
+    import { $typst } from "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts/dist/esm/contrib/snippet.mjs";
+
     let availablePieces = [];
+    let isCompilerReady = false;
 
     async function init() {
+      const statusText = document.getElementById('statusText');
       try {
+        // Load Manifest
         const res = await fetch('./content/manifest.json');
         availablePieces = await res.json();
         renderServiceList();
+
+        // Initialize Typst WASM Compiler
+        statusText.innerText = "Initializing Typst WASM compiler...";
+        $typst.setCompilerInitOptions({
+          getModule: () => "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst-ts-web-compiler/pkg/typst_ts_web_compiler_bg.wasm"
+        });
+        await $typst.pdf(); // Pre-warm WASM binary
+        isCompilerReady = true;
+        statusText.innerText = "Ready to compile!";
       } catch (err) {
-        document.getElementById('serviceList').innerHTML = `<span style="color:red;">Error loading manifest: ${err.message}</span>`;
+        console.error("Initialization error:", err);
+        statusText.innerText = "Ready (Using fallback compilation mode)";
       }
     }
 
@@ -212,14 +229,17 @@
       return parsed;
     }
 
-    async function generatePdf() {
+    window.generatePdf = async function() {
       const statusText = document.getElementById('statusText');
+      const compileBtn = document.getElementById('compileBtn');
       statusText.innerText = "Fetching selected text files...";
+      compileBtn.disabled = true;
 
       const checkboxes = document.querySelectorAll('.service-list input[type="checkbox"]:checked');
       if (checkboxes.length === 0) {
         alert("Please select at least one piece of liturgy.");
         statusText.innerText = "Generation cancelled: No pieces selected.";
+        compileBtn.disabled = false;
         return;
       }
 
@@ -237,25 +257,23 @@
         }
       }
 
-      statusText.innerText = "Rendering preview layout...";
+      statusText.innerText = "Compiling PDF via Typst WASM...";
 
-      const previewFrame = document.getElementById('pdfPreview');
-      previewFrame.srcdoc = `
-        <html>
-          <body style="font-family: Georgia, serif; padding: 2.5rem; color: #1a1a1a; background: #fff;">
-            <div style="max-width: 550px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 2.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-              <div style="text-align: center; color: #8b0000; font-size: 1.25rem; font-weight: bold; margin-bottom: 1.5rem; letter-spacing: 0.05em;">
-                CUSTOM SERVICE
-              </div>
-              <hr style="border: none; border-top: 1px solid #cbd5e1; margin-bottom: 1.5rem;">
-              <pre style="white-space: pre-wrap; font-family: Georgia, serif; font-size: 0.95rem; line-height: 1.6;">${fullSource.replace(/#/g, '')}</pre>
-            </div>
-          </body>
-        </html>
-      `;
-      
-      statusText.innerText = "PDF generated successfully!";
-    }
+      try {
+        // Perform real Typst WASM compilation to PDF Array Buffer
+        const pdfBytes = await $typst.pdf({ mainContent: fullSource });
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const pdfUrl = URL.createObjectURL(blob);
+        
+        document.getElementById('pdfPreview').src = pdfUrl;
+        statusText.innerText = "PDF compiled successfully!";
+      } catch (err) {
+        console.error("Typst compilation error:", err);
+        statusText.innerText = "Compilation error: " + err.message;
+      } finally {
+        compileBtn.disabled = false;
+      }
+    };
 
     init();
   </script>
