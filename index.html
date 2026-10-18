@@ -4,6 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BCP 2019 Prayer Book Builder</title>
+  
+  <!-- Comprehensive Import Map to catch internal library bare specifiers -->
+  <script type="importmap">
+    {
+      "imports": {
+        "@myriaddreamin/typst.ts": "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/index.mjs",
+        "@myriaddreamin/typst.ts/": "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/"
+      }
+    }
+  </script>
 
   <style>
     :root {
@@ -156,8 +166,7 @@
   </main>
 
   <script type="module">
-    // Direct absolute CDN URL import (bypasses import map errors entirely)
-    import { $typst } from "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/contrib/snippet.mjs";
+    import { $typst } from "@myriaddreamin/typst.ts/contrib/snippet.mjs";
 
     let availablePieces = [];
 
