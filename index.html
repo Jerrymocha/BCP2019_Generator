@@ -4,16 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BCP 2019 Prayer Book Builder</title>
-  
-  <!-- Comprehensive Import Map to catch internal library bare specifiers -->
-  <script type="importmap">
-    {
-      "imports": {
-        "@myriaddreamin/typst.ts": "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/index.mjs",
-        "@myriaddreamin/typst.ts/": "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/"
-      }
-    }
-  </script>
+
+  <!-- Official All-in-One Typst Lite Bundle (Handles WASM & Environment automatically) -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts/dist/esm/contrib/all-in-one-lite.bundle.js" id="typst"></script>
 
   <style>
     :root {
@@ -97,6 +90,7 @@
     }
     .badge-contemporary { background: #e0f2fe; color: #0369a1; }
     .badge-traditional { background: #fef3c7; color: #92400e; }
+    .badge-general { background: #f1f5f9; color: #475569; }
     .service-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
     .btn {
       background: var(--primary);
@@ -155,8 +149,8 @@
         </textarea>
       </details>
 
-      <button class="btn" id="compileBtn" onclick="generatePdf()">Compile Custom PDF</button>
-      <div class="status-msg" id="statusText">Initializing WASM Compiler...</div>
+      <button class="btn" id="compileBtn" disabled onclick="generatePdf()">Waiting for Typst Engine...</button>
+      <div class="status-msg" id="statusText">Loading compiler script...</div>
     </div>
 
     <div class="panel">
@@ -165,38 +159,44 @@
     </div>
   </main>
 
-  <script type="module">
-    import { $typst } from "@myriaddreamin/typst.ts/contrib/snippet.mjs";
-
+  <script>
     let availablePieces = [];
+    let compilerLoaded = false;
 
-    async function init() {
+    // Listen for the bundle script to load
+    document.getElementById('typst').addEventListener('load', async function () {
       const statusText = document.getElementById('statusText');
+      const compileBtn = document.getElementById('compileBtn');
       const listStatus = document.getElementById('listStatus');
-      
+
       try {
+        statusText.innerText = "Configuring WASM compiler options...";
+        
+        // Setup WebAssembly compiler options pointing to the binary asset
+        if (window.$typst && window.$typst.setCompilerInitOptions) {
+          window.$typst.setCompilerInitOptions({
+            getModule: () => "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst-ts-web-compiler@0.5.0-rc8/pkg/typst_ts_web_compiler_bg.wasm"
+          });
+        }
+
+        // Fetch manifest list
         listStatus.innerText = "Fetching manifest.json...";
         const res = await fetch('./content/manifest.json');
-        
-        if (!res.ok) {
-          throw new Error(`Failed to load manifest.json (HTTP ${res.status})`);
-        }
+        if (!res.ok) throw new Error(`Failed to load manifest.json (HTTP ${res.status})`);
         
         availablePieces = await res.json();
         renderServiceList();
 
-        statusText.innerText = "Initializing Typst Engine...";
-        $typst.setCompilerInitOptions({
-          getModule: () => "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst-ts-web-compiler@0.5.0-rc8/pkg/typst_ts_web_compiler_bg.wasm"
-        });
-        
+        compilerLoaded = true;
         statusText.innerText = "Ready to compile!";
+        compileBtn.innerText = "Compile Custom PDF";
+        compileBtn.disabled = false;
       } catch (err) {
         console.error("Initialization error:", err);
         listStatus.innerHTML = `<span style="color: #ef4444; font-weight: 500;">Error: ${err.message}</span>`;
         statusText.innerText = "Initialization failed.";
       }
-    }
+    });
 
     function renderServiceList() {
       const listEl = document.getElementById('serviceList');
@@ -208,7 +208,10 @@
       }
 
       availablePieces.forEach((piece, idx) => {
-        const badgeClass = piece.tradition === 'traditional' ? 'badge-traditional' : 'badge-contemporary';
+        let badgeClass = 'badge-general';
+        if (piece.tradition === 'traditional') badgeClass = 'badge-traditional';
+        if (piece.tradition === 'contemporary') badgeClass = 'badge-contemporary';
+
         const label = document.createElement('label');
         label.className = 'service-item';
         label.innerHTML = `
@@ -216,7 +219,7 @@
           <div class="service-info">
             <div class="service-header-row">
               <span class="service-title">${piece.title}</span>
-              <span class="badge ${badgeClass}">${piece.tradition}</span>
+              <span class="badge ${badgeClass}">${piece.tradition || 'general'}</span>
             </div>
             <span class="service-desc">${piece.description}</span>
           </div>
@@ -250,6 +253,11 @@
     }
 
     window.generatePdf = async function() {
+      if (!compilerLoaded || !window.$typst) {
+        alert("Typst engine is still initializing. Please wait a moment.");
+        return;
+      }
+
       const statusText = document.getElementById('statusText');
       const compileBtn = document.getElementById('compileBtn');
       statusText.innerText = "Fetching selected text files...";
@@ -281,7 +289,7 @@
       statusText.innerText = "Compiling PDF via Typst WASM...";
 
       try {
-        const pdfBytes = await $typst.pdf({ mainContent: fullSource });
+        const pdfBytes = await window.$typst.pdf({ mainContent: fullSource });
         const blob = new Blob([pdfBytes], { type: 'application/pdf' });
         const pdfUrl = URL.createObjectURL(blob);
         
@@ -294,8 +302,6 @@
         compileBtn.disabled = false;
       }
     };
-
-    init();
   </script>
 </body>
 </html>
