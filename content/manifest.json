@@ -1,0 +1,14 @@
+[
+  {
+    "file": "contemporary/Acclamation.txt",
+    "title": "Acclamation",
+    "tradition": "contemporary",
+    "description": "Contemporary liturgy piece."
+  },
+  {
+    "file": "traditional/Acclamation.txt",
+    "title": "Acclamation",
+    "tradition": "traditional",
+    "description": "Traditional liturgy piece."
+  }
+]
