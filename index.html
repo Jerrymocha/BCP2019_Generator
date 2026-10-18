@@ -4,16 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BCP 2019 Prayer Book Builder</title>
-  
-  <!-- Import Map to resolve bare module specifiers for Typst WASM -->
-  <script type="importmap">
-    {
-      "imports": {
-        "@myriaddreamin/typst.ts/contrib/snippet": "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/contrib/snippet.mjs",
-        "@myriaddreamin/typst.ts": "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/index.mjs"
-      }
-    }
-  </script>
 
   <style>
     :root {
@@ -166,7 +156,8 @@
   </main>
 
   <script type="module">
-    import { $typst } from "@myriaddreamin/typst.ts/contrib/snippet";
+    // Direct absolute CDN URL import (bypasses import map errors entirely)
+    import { $typst } from "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst.ts@0.5.0-rc8/dist/esm/contrib/snippet.mjs";
 
     let availablePieces = [];
 
@@ -179,7 +170,7 @@
         const res = await fetch('./content/manifest.json');
         
         if (!res.ok) {
-          throw new Error(`Failed to load manifest.json (HTTP ${res.status} - Make sure it is inside the 'content' folder!)`);
+          throw new Error(`Failed to load manifest.json (HTTP ${res.status})`);
         }
         
         availablePieces = await res.json();
