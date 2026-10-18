@@ -133,7 +133,7 @@
       <p class="status-msg">Check the boxes below to build your custom service:</p>
       
       <div class="service-list" id="serviceList">
-        <span class="status-msg">Loading available pieces...</span>
+        <span class="status-msg" id="listStatus">Loading available pieces...</span>
       </div>
 
       <h2>2. Custom Styling Template</h2>
@@ -142,4 +142,160 @@
         <textarea id="typstTemplate" style="width:100%; height:120px; font-family:monospace; font-size:0.8rem; margin-top:0.5rem; padding:0.5rem;" spellcheck="false">
 #set page(
   paper: "a5",
-  margin
+  margin: (top: 2cm, bottom: 2cm, inside: 2cm, outside: 1.5cm),
+  header: align(center, text(9pt, style: "italic")[The Book of Common Prayer]),
+  footer: align(center, counter(page).display("1"))
+)
+#set text(size: 10pt)
+
+#let rubric(body) = [
+  #set text(fill: rgb("#8b0000"), style: "italic", size: 9pt)
+  #v(4pt) #body #v(4pt)
+]
+        </textarea>
+      </details>
+
+      <button class="btn" id="compileBtn" onclick="generatePdf()">Compile Custom PDF</button>
+      <div class="status-msg" id="statusText">Initializing WASM Compiler...</div>
+    </div>
+
+    <div class="panel">
+      <h2>3. Preview PDF</h2>
+      <iframe id="pdfPreview" title="PDF Preview"></iframe>
+    </div>
+  </main>
+
+  <script type="module">
+    import { $typst } from "@myriaddreamin/typst.ts/contrib/snippet";
+
+    let availablePieces = [];
+
+    async function init() {
+      const statusText = document.getElementById('statusText');
+      const listStatus = document.getElementById('listStatus');
+      
+      try {
+        listStatus.innerText = "Fetching manifest.json...";
+        const res = await fetch('./content/manifest.json');
+        
+        if (!res.ok) {
+          throw new Error(`Failed to load manifest.json (HTTP ${res.status} - Make sure it is inside the 'content' folder!)`);
+        }
+        
+        availablePieces = await res.json();
+        renderServiceList();
+
+        statusText.innerText = "Initializing Typst Engine...";
+        $typst.setCompilerInitOptions({
+          getModule: () => "https://cdn.jsdelivr.net/npm/@myriaddreamin/typst-ts-web-compiler@0.5.0-rc8/pkg/typst_ts_web_compiler_bg.wasm"
+        });
+        
+        statusText.innerText = "Ready to compile!";
+      } catch (err) {
+        console.error("Initialization error:", err);
+        listStatus.innerHTML = `<span style="color: #ef4444; font-weight: 500;">Error: ${err.message}</span>`;
+        statusText.innerText = "Initialization failed.";
+      }
+    }
+
+    function renderServiceList() {
+      const listEl = document.getElementById('serviceList');
+      listEl.innerHTML = '';
+      
+      if (availablePieces.length === 0) {
+        listEl.innerHTML = `<span style="color: #ef4444;">No items found in manifest.json</span>`;
+        return;
+      }
+
+      availablePieces.forEach((piece, idx) => {
+        const badgeClass = piece.tradition === 'traditional' ? 'badge-traditional' : 'badge-contemporary';
+        const label = document.createElement('label');
+        label.className = 'service-item';
+        label.innerHTML = `
+          <input type="checkbox" value="${piece.file}" ${idx === 0 ? 'checked' : ''}>
+          <div class="service-info">
+            <div class="service-header-row">
+              <span class="service-title">${piece.title}</span>
+              <span class="badge ${badgeClass}">${piece.tradition}</span>
+            </div>
+            <span class="service-desc">${piece.description}</span>
+          </div>
+        `;
+        listEl.appendChild(label);
+      });
+    }
+
+    function parseTextToTypst(rawText) {
+      const lines = rawText.split('\n');
+      let parsed = '';
+
+      for (let line of lines) {
+        if (line.startsWith('[TITLE]')) {
+          const text = line.replace('[TITLE]', '').trim();
+          parsed += `\n#align(center)[#text(12pt, weight: "bold", fill: rgb("#8b0000"))[${text}]]\n#v(6pt)\n`;
+        } else if (line.startsWith('[RUBRIC]')) {
+          const text = line.replace('[RUBRIC]', '').trim();
+          parsed += `\n#rubric[${text}]\n`;
+        } else if (line.startsWith('[LEADER]')) {
+          const text = line.replace('[LEADER]', '').trim();
+          parsed += `\n*Officiant:* ${text}\n`;
+        } else if (line.startsWith('[RESPONSE]')) {
+          const text = line.replace('[RESPONSE]', '').trim();
+          parsed += `\n*People:* ${text}\n`;
+        } else {
+          parsed += `${line}\n`;
+        }
+      }
+      return parsed;
+    }
+
+    window.generatePdf = async function() {
+      const statusText = document.getElementById('statusText');
+      const compileBtn = document.getElementById('compileBtn');
+      statusText.innerText = "Fetching selected text files...";
+      compileBtn.disabled = true;
+
+      const checkboxes = document.querySelectorAll('.service-list input[type="checkbox"]:checked');
+      if (checkboxes.length === 0) {
+        alert("Please select at least one piece of liturgy.");
+        statusText.innerText = "Generation cancelled: No pieces selected.";
+        compileBtn.disabled = false;
+        return;
+      }
+
+      let fullSource = document.getElementById('typstTemplate').value + "\n\n";
+
+      for (const cb of checkboxes) {
+        try {
+          const res = await fetch(`./content/${cb.value}`);
+          if (!res.ok) throw new Error(`Could not load file: ${cb.value}`);
+          const text = await res.text();
+          fullSource += `\n// Source: ${cb.value}\n`;
+          fullSource += parseTextToTypst(text);
+          fullSource += `\n#v(12pt)\n`;
+        } catch (err) {
+          console.error(`Failed to load ${cb.value}`, err);
+        }
+      }
+
+      statusText.innerText = "Compiling PDF via Typst WASM...";
+
+      try {
+        const pdfBytes = await $typst.pdf({ mainContent: fullSource });
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const pdfUrl = URL.createObjectURL(blob);
+        
+        document.getElementById('pdfPreview').src = pdfUrl;
+        statusText.innerText = "PDF compiled successfully!";
+      } catch (err) {
+        console.error("Typst compilation error:", err);
+        statusText.innerText = "Compilation error: " + err.message;
+      } finally {
+        compileBtn.disabled = false;
+      }
+    };
+
+    init();
+  </script>
+</body>
+</html>
